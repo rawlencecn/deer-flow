@@ -16,6 +16,9 @@ const DEFAULT_SETTINGS: SettingsState = {
     maxStepNum: 3,
     maxSearchResults: 3,
     reportStyle: "academic",
+    enableMultiModel: false,
+    selectedModels: ["qwen1.5-72b", "gpt-4-turbo", "deepseek-v3"],
+    evaluationWeights: { accuracy: 0.4, completeness: 0.3, readability: 0.3 },
   },
   mcp: {
     servers: [],
@@ -31,6 +34,9 @@ export type SettingsState = {
     maxStepNum: number;
     maxSearchResults: number;
     reportStyle: "academic" | "popular_science" | "news" | "social_media";
+    enableMultiModel: boolean;
+    selectedModels: string[];
+    evaluationWeights: { accuracy: number; completeness: number; readability: number };
   };
   mcp: {
     servers: MCPServerMetadata[];
@@ -156,6 +162,36 @@ export function setEnableBackgroundInvestigation(value: boolean) {
     general: {
       ...state.general,
       enableBackgroundInvestigation: value,
+    },
+  }));
+  saveSettings();
+}
+
+export function setEnableMultiModel(value: boolean) {
+  useSettingsStore.setState((state) => ({
+    general: {
+      ...state.general,
+      enableMultiModel: value,
+    },
+  }));
+  saveSettings();
+}
+
+export function setSelectedModels(models: string[]) {
+  useSettingsStore.setState((state) => ({
+    general: {
+      ...state.general,
+      selectedModels: models,
+    },
+  }));
+  saveSettings();
+}
+
+export function setEvaluationWeights(weights: { accuracy: number; completeness: number; readability: number }) {
+  useSettingsStore.setState((state) => ({
+    general: {
+      ...state.general,
+      evaluationWeights: weights,
     },
   }));
   saveSettings();

@@ -65,6 +65,18 @@ class ChatRequest(BaseModel):
     enable_deep_thinking: Optional[bool] = Field(
         False, description="Whether to enable deep thinking"
     )
+    
+    enable_multi_model: Optional[bool] = Field(
+        False, description="Whether to enable multi-model parallel execution"
+    )
+    selected_models: Optional[List[str]] = Field(
+        ["qwen1.5-72b", "gpt-4-turbo", "deepseek-v3"], 
+        description="List of models to use for parallel execution"
+    )
+    evaluation_weights: Optional[dict] = Field(
+        {"accuracy": 0.4, "completeness": 0.3, "readability": 0.3},
+        description="Weights for evaluation metrics"
+    )
 
 
 class TTSRequest(BaseModel):

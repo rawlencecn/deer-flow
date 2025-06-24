@@ -4,6 +4,7 @@
 import json
 import logging
 import os
+import asyncio
 from typing import Annotated, Literal
 
 from langchain_core.messages import AIMessage, HumanMessage
@@ -21,9 +22,9 @@ from src.tools import (
     python_repl_tool,
 )
 
-from src.config.agents import AGENT_LLM_MAP
+from src.config.agents import AGENT_LLM_MAP, DEFAULT_MULTI_MODELS
 from src.config.configuration import Configuration
-from src.llms.llm import get_llm_by_type
+from src.llms.llm import get_llm_by_type, execute_single_model
 from src.prompts.planner_model import Plan
 from src.prompts.template import apply_prompt_template
 from src.utils.json_utils import repair_json_output
@@ -502,3 +503,270 @@ async def coder_node(
         "coder",
         [python_repl_tool],
     )
+
+
+async def multi_model_parallel_node(
+    state: State, config: RunnableConfig
+) -> Command[Literal["model_comparison"]]:
+    """Multi-model parallel execution node."""
+    logger.info("Multi-model parallel execution starting.")
+    
+    selected_models = state.get("selected_models", DEFAULT_MULTI_MODELS)
+    if not selected_models:
+        selected_models = DEFAULT_MULTI_MODELS
+    
+    logger.info(f"Selected models for parallel execution: {selected_models}")
+    
+    messages = state.get("messages", [])
+    if not messages:
+        logger.warning("No messages found for multi-model execution")
+        return Command(
+            update={"multi_model_outputs": {}},
+            goto="model_comparison"
+        )
+    
+    llm_messages = []
+    for msg in messages:
+        if hasattr(msg, 'content'):
+            if hasattr(msg, 'name') and msg.name == "user":
+                llm_messages.append(HumanMessage(content=msg.content))
+            elif hasattr(msg, 'name') and msg.name in ["assistant", "planner", "researcher", "coder", "reporter"]:
+                llm_messages.append(AIMessage(content=msg.content))
+    
+    if not llm_messages:
+        research_topic = state.get("research_topic", "")
+        if research_topic:
+            llm_messages = [HumanMessage(content=research_topic)]
+        else:
+            logger.warning("No valid messages or research topic found")
+            return Command(
+                update={"multi_model_outputs": {}},
+                goto="model_comparison"
+            )
+    
+    tasks = []
+    for model_id in selected_models[:5]:  # Limit to max 5 models
+        task = asyncio.create_task(
+            execute_single_model(llm_messages, model_id, timeout=120)
+        )
+        tasks.append((model_id, task))
+    
+    model_outputs = {}
+    for model_id, task in tasks:
+        try:
+            result = await task
+            model_outputs[model_id] = result
+            logger.info(f"Model {model_id} completed successfully")
+        except Exception as e:
+            logger.warning(f"Model {model_id} failed: {str(e)}")
+            model_outputs[model_id] = {
+                "model_id": model_id,
+                "error": str(e),
+                "success": False
+            }
+    
+    logger.info(f"Multi-model parallel execution completed. Results: {len(model_outputs)} models")
+    
+    return Command(
+        update={"multi_model_outputs": model_outputs},
+        goto="model_comparison"
+    )
+
+
+def model_comparison_node(state: State, config: RunnableConfig):
+    """Model comparison and evaluation node."""
+    logger.info("Starting model comparison and evaluation.")
+    
+    multi_model_outputs = state.get("multi_model_outputs", {})
+    if not multi_model_outputs:
+        logger.warning("No multi-model outputs found for comparison")
+        return {"model_comparison_results": {}}
+    
+    comparison_results = {}
+    
+    for model_id, output in multi_model_outputs.items():
+        if not output.get("success", False):
+            logger.warning(f"Skipping failed model {model_id}: {output.get('error', 'Unknown error')}")
+            continue
+            
+        content = output.get("content", "")
+        execution_time = output.get("execution_time", 0)
+        tokens = output.get("tokens", 0)
+        
+        cost = calculate_model_cost(model_id, tokens)
+        
+        faithfulness_score = calculate_faithfulness_score(content)
+        logic_score = calculate_logic_score(content)
+        information_density = calculate_information_density(content)
+        
+        normalized_output = normalize_output(content)
+        
+        metrics = {
+            "latency": execution_time,
+            "cost": cost,
+            "tokens": tokens,
+            "faithfulness_score": faithfulness_score,
+            "logic_score": logic_score,
+            "information_density": information_density
+        }
+        
+        weights = {
+            "faithfulness_score": 0.4,  # Accuracy 40%
+            "logic_score": 0.3,         # Completeness 30%
+            "information_density": 0.3   # Readability 30%
+        }
+        
+        total_score = (
+            faithfulness_score * weights["faithfulness_score"] +
+            logic_score * weights["logic_score"] +
+            information_density * weights["information_density"]
+        )
+        
+        comparison_results[model_id] = {
+            "model_id": model_id,
+            "normalized_output": normalized_output,
+            "execution_metrics": {
+                "latency": execution_time,
+                "cost": cost,
+                "tokens": tokens
+            },
+            "evaluation_scores": {
+                "faithfulness_score": faithfulness_score,
+                "logic_score": logic_score,
+                "information_density": information_density,
+                "total_score": total_score
+            },
+            "raw_output": output
+        }
+    
+    ranking = sorted(
+        [(model_id, data["evaluation_scores"]["total_score"]) 
+         for model_id, data in comparison_results.items()],
+        key=lambda x: x[1],
+        reverse=True
+    )
+    
+    final_results = {
+        "ranking": [{"model_id": model_id, "total_score": score} for model_id, score in ranking],
+        "detailed_comparison": comparison_results,
+        "summary": {
+            "total_models": len(comparison_results),
+            "best_model": ranking[0][0] if ranking else None,
+            "average_latency": sum(data["execution_metrics"]["latency"] for data in comparison_results.values()) / len(comparison_results) if comparison_results else 0,
+            "total_cost": sum(data["execution_metrics"]["cost"] for data in comparison_results.values())
+        }
+    }
+    
+    logger.info(f"Model comparison completed. Best model: {final_results['summary']['best_model']}")
+    
+    return {"model_comparison_results": final_results}
+
+
+def calculate_model_cost(model_id: str, tokens: int) -> float:
+    """Calculate cost based on model and token usage."""
+    cost_rates = {
+        "qwen1.5-72b": 0.002,
+        "gpt-4-turbo": 0.01,
+        "deepseek-v3": 0.001,
+        "claude-3": 0.008,
+        "doubao-pro": 0.002
+    }
+    
+    rate = cost_rates.get(model_id, 0.005)  # Default rate
+    return (tokens / 1000) * rate
+
+
+def calculate_faithfulness_score(content: str, reference: str = "") -> float:
+    """Calculate faithfulness score using simple heuristics."""
+    if not content:
+        return 0.0
+    
+    if not reference:
+        sentences = content.split('.')
+        has_structure = any(marker in content.lower() for marker in ['##', '###', '1.', '2.', '-', '*'])
+        has_citations = '[' in content and ']' in content
+        
+        base_score = 0.6
+        if has_structure:
+            base_score += 0.2
+        if has_citations:
+            base_score += 0.1
+        if len(sentences) > 3:
+            base_score += 0.1
+            
+        return min(base_score, 1.0)
+    
+    common_words = set(content.lower().split()) & set(reference.lower().split())
+    total_words = len(set(content.lower().split()) | set(reference.lower().split()))
+    
+    return len(common_words) / total_words if total_words > 0 else 0.0
+
+
+def calculate_logic_score(content: str) -> float:
+    """Calculate logical consistency score."""
+    if not content:
+        return 0.0
+    
+    logical_connectors = ["因此", "所以", "由于", "因为", "然而", "但是", "而且", "另外", "therefore", "however", "moreover", "furthermore", "consequently"]
+    connector_count = sum(1 for connector in logical_connectors if connector.lower() in content.lower())
+    
+    structure_indicators = ["##", "###", "1.", "2.", "3.", "first", "second", "third", "首先", "其次", "最后"]
+    structure_count = sum(1 for indicator in structure_indicators if indicator.lower() in content.lower())
+    
+    words = len(content.split())
+    if words == 0:
+        return 0.0
+    
+    connector_score = min(connector_count / (words / 100), 0.5)
+    structure_score = min(structure_count / 10, 0.5)
+    
+    return connector_score + structure_score
+
+
+def calculate_information_density(content: str) -> float:
+    """Calculate information density score."""
+    if not content:
+        return 0.0
+    
+    stop_words = {"的", "了", "在", "是", "有", "和", "与", "或", "但", "而", "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by"}
+    words = content.split()
+    meaningful_words = [w for w in words if w.lower() not in stop_words and len(w) > 2]
+    
+    if not words:
+        return 0.0
+    
+    unique_meaningful = len(set(meaningful_words))
+    total_words = len(words)
+    
+    density = unique_meaningful / total_words
+    
+    # Bonus for technical terms, numbers, and specific information
+    technical_indicators = sum(1 for word in words if any(char.isdigit() for char in word))
+    technical_bonus = min(technical_indicators / total_words, 0.2)
+    
+    return min(density + technical_bonus, 1.0)
+
+
+def normalize_output(content: str) -> str:
+    """Normalize output to standard Markdown format."""
+    if not content:
+        return ""
+    
+    lines = content.split('\n')
+    normalized_lines = []
+    
+    for line in lines:
+        line = line.strip()
+        if not line:
+            normalized_lines.append("")
+            continue
+            
+        if line.startswith('#'):
+            if normalized_lines and normalized_lines[-1]:
+                normalized_lines.append("")
+            normalized_lines.append(line)
+            normalized_lines.append("")
+        else:
+            normalized_lines.append(line)
+    
+    return '\n'.join(normalized_lines).strip()

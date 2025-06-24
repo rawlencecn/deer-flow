@@ -20,6 +20,7 @@ import type { Option, Resource } from "~/core/messages";
 import {
   setEnableDeepThinking,
   setEnableBackgroundInvestigation,
+  setEnableMultiModel,
   useSettingsStore,
 } from "~/core/store";
 import { cn } from "~/lib/utils";
@@ -51,6 +52,9 @@ export function InputBox({
   );
   const backgroundInvestigation = useSettingsStore(
     (state) => state.general.enableBackgroundInvestigation,
+  );
+  const enableMultiModel = useSettingsStore(
+    (state) => state.general.enableMultiModel,
   );
   const reasoningModel = useMemo(() => getConfig().models.reasoning?.[0], []);
   const reportStyle = useSettingsStore((state) => state.general.reportStyle);
@@ -265,6 +269,33 @@ export function InputBox({
               }
             >
               <Detective /> Investigation
+            </Button>
+          </Tooltip>
+          <Tooltip
+            className="max-w-60"
+            title={
+              <div>
+                <h3 className="mb-2 font-bold">
+                  Multi-Model Mode: {enableMultiModel ? "On" : "Off"}
+                </h3>
+                <p>
+                  When enabled, DeerFlow will run multiple models in parallel
+                  and provide a comparison of their outputs with evaluation metrics.
+                </p>
+              </div>
+            }
+          >
+            <Button
+              className={cn(
+                "rounded-2xl",
+                enableMultiModel && "!border-brand !text-brand",
+              )}
+              variant="outline"
+              onClick={() => {
+                setEnableMultiModel(!enableMultiModel);
+              }}
+            >
+              🔄 Multi-Model
             </Button>
           </Tooltip>
           <ReportStyleDialog />

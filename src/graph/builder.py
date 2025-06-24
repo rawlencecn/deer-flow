@@ -15,6 +15,8 @@ from .nodes import (
     coder_node,
     human_feedback_node,
     background_investigation_node,
+    multi_model_parallel_node,
+    model_comparison_node,
 )
 
 
@@ -23,6 +25,8 @@ def continue_to_running_research_team(state: State):
     if not current_plan or not current_plan.steps:
         return "planner"
     if all(step.execution_res for step in current_plan.steps):
+        if state.get("selected_models") and len(state.get("selected_models", [])) > 1:
+            return "multi_model_parallel"
         return "planner"
     for step in current_plan.steps:
         if not step.execution_res:
@@ -46,12 +50,18 @@ def _build_base_graph():
     builder.add_node("researcher", researcher_node)
     builder.add_node("coder", coder_node)
     builder.add_node("human_feedback", human_feedback_node)
+    
+    builder.add_node("multi_model_parallel", multi_model_parallel_node)
+    builder.add_node("model_comparison", model_comparison_node)
+    
     builder.add_edge("background_investigator", "planner")
     builder.add_conditional_edges(
         "research_team",
         continue_to_running_research_team,
-        ["planner", "researcher", "coder"],
+        ["planner", "researcher", "coder", "multi_model_parallel"],
     )
+    builder.add_edge("multi_model_parallel", "model_comparison")
+    builder.add_edge("model_comparison", "reporter")
     builder.add_edge("reporter", END)
     return builder
 

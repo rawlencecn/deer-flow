@@ -18,3 +18,32 @@ BASIC_MODEL:
 #   base_url: https://ark-cn-beijing.bytedance.net/api/v3
 #   model: "doubao-1-5-thinking-pro-m-250428"
 #   api_key: xxxx
+
+# Multi-model comparison configurations
+# Configure multiple models for parallel execution and comparison
+# Uncomment and configure the models you want to use for comparison
+
+# QWEN_MODEL:
+#   base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
+#   model: "qwen1.5-72b-chat"
+#   api_key: xxxx
+
+# GPT4_MODEL:
+#   base_url: https://api.openai.com/v1
+#   model: "gpt-4-turbo"
+#   api_key: xxxx
+
+# DEEPSEEK_MODEL:
+#   base_url: https://api.deepseek.com/v1
+#   model: "deepseek-chat"
+#   api_key: xxxx
+
+# CLAUDE_MODEL:
+#   base_url: https://api.anthropic.com/v1
+#   model: "claude-3-sonnet-20240229"
+#   api_key: xxxx
+
+# DOUBAO_MODEL:
+#   base_url: https://ark.cn-beijing.volces.com/api/v3
+#   model: "doubao-1-5-pro-32k-250115"
+#   api_key: xxxx

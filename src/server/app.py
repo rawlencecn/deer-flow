@@ -83,6 +83,9 @@ async def chat_stream(request: ChatRequest):
             request.enable_background_investigation,
             request.report_style,
             request.enable_deep_thinking,
+            request.enable_multi_model,
+            request.selected_models,
+            request.evaluation_weights,
         ),
         media_type="text/event-stream",
     )
@@ -101,6 +104,9 @@ async def _astream_workflow_generator(
     enable_background_investigation: bool,
     report_style: ReportStyle,
     enable_deep_thinking: bool,
+    enable_multi_model: bool,
+    selected_models: List[str],
+    evaluation_weights: dict,
 ):
     input_ = {
         "messages": messages,
@@ -111,6 +117,9 @@ async def _astream_workflow_generator(
         "auto_accepted_plan": auto_accepted_plan,
         "enable_background_investigation": enable_background_investigation,
         "research_topic": messages[-1]["content"] if messages else "",
+        "selected_models": selected_models if enable_multi_model else [],
+        "multi_model_outputs": {},
+        "model_comparison_results": {},
     }
     if not auto_accepted_plan and interrupt_feedback:
         resume_msg = f"[{interrupt_feedback}]"

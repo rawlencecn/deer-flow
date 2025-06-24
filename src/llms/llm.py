@@ -2,18 +2,21 @@
 # SPDX-License-Identifier: MIT
 
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Union
 import os
+import asyncio
+import time
 
 from langchain_openai import ChatOpenAI
 from langchain_deepseek import ChatDeepSeek
 from typing import get_args
 
 from src.config import load_yaml_config
-from src.config.agents import LLMType
+from src.config.agents import LLMType, MultiModelType, MULTI_MODEL_CONFIG_MAP
 
 # Cache for LLM instances
 _llm_cache: dict[LLMType, ChatOpenAI] = {}
+_multi_model_cache: dict[str, Union[ChatOpenAI, ChatDeepSeek]] = {}
 
 
 def _get_config_file_path() -> str:
@@ -128,6 +131,110 @@ def get_configured_llm_models() -> dict[str, list[str]]:
         # Log error and return empty dict to avoid breaking the application
         print(f"Warning: Failed to load LLM configuration: {e}")
         return {}
+
+
+def get_multi_model_instance(model_id: str) -> Union[ChatOpenAI, ChatDeepSeek]:
+    """
+    Get LLM instance for multi-model comparison by model ID.
+    Returns cached instance if available.
+    """
+    if model_id in _multi_model_cache:
+        return _multi_model_cache[model_id]
+
+    if model_id not in MULTI_MODEL_CONFIG_MAP:
+        raise ValueError(f"Unknown multi-model ID: {model_id}")
+
+    model_config = MULTI_MODEL_CONFIG_MAP[model_id]
+    conf = load_yaml_config(_get_config_file_path())
+    
+    # Get configuration from YAML file
+    config_key = model_config["config_key"]
+    yaml_conf = conf.get(config_key, {})
+    
+    # Get configuration from environment variables
+    env_conf = _get_env_llm_conf(model_id.replace("-", "_"))
+    
+    # Merge configurations, with environment variables taking precedence
+    merged_conf = {**yaml_conf, **env_conf}
+    
+    if "model" not in merged_conf:
+        merged_conf["model"] = model_config["default_model"]
+    
+    if model_config["provider"] == "deepseek":
+        if "base_url" in merged_conf:
+            merged_conf["api_base"] = merged_conf.pop("base_url")
+        llm = ChatDeepSeek(**merged_conf)
+    else:
+        llm = ChatOpenAI(**merged_conf)
+    
+    _multi_model_cache[model_id] = llm
+    return llm
+
+
+async def execute_single_model(
+    messages: list, 
+    model_id: str, 
+    timeout: int = 120
+) -> dict:
+    """
+    Execute a single model with timeout and return standardized output.
+    
+    Args:
+        messages: List of messages to send to the model
+        model_id: ID of the model to use
+        timeout: Timeout in seconds
+        
+    Returns:
+        Dictionary with execution results and metrics
+    """
+    start_time = time.time()
+    
+    try:
+        llm = get_multi_model_instance(model_id)
+        
+        result = await asyncio.wait_for(
+            llm.ainvoke(messages),
+            timeout=timeout
+        )
+        
+        execution_time = time.time() - start_time
+        
+        content = result.content if hasattr(result, 'content') else str(result)
+        token_usage = getattr(result, 'usage_metadata', {})
+        total_tokens = token_usage.get('total_tokens', len(content.split()))
+        
+        return {
+            "model_id": model_id,
+            "content": content,
+            "execution_time": execution_time,
+            "tokens": total_tokens,
+            "success": True
+        }
+        
+    except asyncio.TimeoutError:
+        return {
+            "model_id": model_id,
+            "error": "timeout",
+            "execution_time": timeout,
+            "success": False
+        }
+    except Exception as e:
+        return {
+            "model_id": model_id,
+            "error": str(e),
+            "execution_time": time.time() - start_time,
+            "success": False
+        }
+
+
+def get_available_multi_models() -> list[str]:
+    """
+    Get list of available multi-model IDs for comparison.
+    
+    Returns:
+        List of model IDs that can be used for multi-model comparison
+    """
+    return list(MULTI_MODEL_CONFIG_MAP.keys())
 
 
 # In the future, we will use reasoning_llm and vl_llm for different purposes
