@@ -28,26 +28,61 @@ MULTI_MODEL_CONFIG_MAP: dict[str, dict] = {
     "qwen1.5-72b": {
         "provider": "openai",
         "config_key": "QWEN_MODEL",
-        "default_model": "qwen1.5-72b-chat"
+        "default_model": "qwen1.5-72b-chat",
+        "default_params": {
+            "temperature": 0.7,
+            "max_tokens": 2048,
+            "top_p": 1.0,
+            "frequency_penalty": 0.0,
+            "presence_penalty": 0.0
+        }
     },
     "gpt-4-turbo": {
         "provider": "openai", 
         "config_key": "GPT4_MODEL",
-        "default_model": "gpt-4-turbo"
+        "default_model": "gpt-4-turbo",
+        "default_params": {
+            "temperature": 0.7,
+            "max_tokens": 4096,
+            "top_p": 1.0,
+            "frequency_penalty": 0.0,
+            "presence_penalty": 0.0
+        }
     },
     "deepseek-v3": {
         "provider": "deepseek",
         "config_key": "DEEPSEEK_MODEL", 
-        "default_model": "deepseek-chat"
+        "default_model": "deepseek-chat",
+        "default_params": {
+            "temperature": 0.7,
+            "max_tokens": 2048,
+            "top_p": 1.0,
+            "frequency_penalty": 0.0,
+            "presence_penalty": 0.0
+        }
     },
     "claude-3": {
         "provider": "openai",
         "config_key": "CLAUDE_MODEL",
-        "default_model": "claude-3-sonnet-20240229"
+        "default_model": "claude-3-sonnet-20240229",
+        "default_params": {
+            "temperature": 0.7,
+            "max_tokens": 4096,
+            "top_p": 1.0,
+            "frequency_penalty": 0.0,
+            "presence_penalty": 0.0
+        }
     },
     "doubao-pro": {
         "provider": "openai",
         "config_key": "DOUBAO_MODEL",
-        "default_model": "doubao-1-5-pro-32k-250115"
+        "default_model": "doubao-1-5-pro-32k-250115",
+        "default_params": {
+            "temperature": 0.7,
+            "max_tokens": 2048,
+            "top_p": 1.0,
+            "frequency_penalty": 0.0,
+            "presence_penalty": 0.0
+        }
     }
 }

@@ -5,7 +5,7 @@ import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Markdown } from "~/components/deer-flow/markdown";
 import { cn } from "~/lib/utils";
-import { ModelComparisonResults, ModelOutput } from "~/core/messages/types";
+import type { ModelComparisonResults, ModelOutput } from "~/core/messages/types";
 
 interface MultiModelComparisonBlockProps {
   comparisonResults: ModelComparisonResults;

@@ -19,6 +19,7 @@ const DEFAULT_SETTINGS: SettingsState = {
     enableMultiModel: false,
     selectedModels: ["qwen1.5-72b", "gpt-4-turbo", "deepseek-v3"],
     evaluationWeights: { accuracy: 0.4, completeness: 0.3, readability: 0.3 },
+    modelParams: {},
   },
   mcp: {
     servers: [],
@@ -37,6 +38,13 @@ export type SettingsState = {
     enableMultiModel: boolean;
     selectedModels: string[];
     evaluationWeights: { accuracy: number; completeness: number; readability: number };
+    modelParams: Record<string, {
+      temperature?: number;
+      max_tokens?: number;
+      top_p?: number;
+      frequency_penalty?: number;
+      presence_penalty?: number;
+    }>;
   };
   mcp: {
     servers: MCPServerMetadata[];
@@ -196,4 +204,23 @@ export function setEvaluationWeights(weights: { accuracy: number; completeness: 
   }));
   saveSettings();
 }
+
+export function setModelParams(modelId: string, params: Record<string, number>) {
+  useSettingsStore.setState((state) => ({
+    general: {
+      ...state.general,
+      modelParams: {
+        ...state.general.modelParams,
+        [modelId]: params,
+      },
+    },
+  }));
+  saveSettings();
+}
+
+export function getModelParams(modelId: string) {
+  const state = useSettingsStore.getState();
+  return state.general.modelParams?.[modelId] || {};
+}
+
 loadSettings();

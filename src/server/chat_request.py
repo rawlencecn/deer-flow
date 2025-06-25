@@ -77,6 +77,10 @@ class ChatRequest(BaseModel):
         {"accuracy": 0.4, "completeness": 0.3, "readability": 0.3},
         description="Weights for evaluation metrics"
     )
+    model_params: Optional[dict] = Field(
+        {},
+        description="Custom parameters for each model in format {model_id: {param: value}}"
+    )
 
 
 class TTSRequest(BaseModel):

@@ -544,10 +544,13 @@ async def multi_model_parallel_node(
                 goto="model_comparison"
             )
     
+    model_params = state.get("model_params", {})
+    
     tasks = []
     for model_id in selected_models[:5]:  # Limit to max 5 models
+        custom_params = model_params.get(model_id, {})
         task = asyncio.create_task(
-            execute_single_model(llm_messages, model_id, timeout=120)
+            execute_single_model(llm_messages, model_id, timeout=120, custom_params=custom_params)
         )
         tasks.append((model_id, task))
     

@@ -20,7 +20,10 @@ import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { Switch } from "~/components/ui/switch";
 import { Checkbox } from "~/components/ui/checkbox";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "~/components/ui/collapsible";
+import { ChevronDown } from "lucide-react";
 import type { SettingsState } from "~/core/store";
+import { getModelParams, setModelParams } from "~/core/store";
 
 import type { Tab } from "./types";
 
@@ -48,6 +51,13 @@ const generalFormSchema = z.object({
     completeness: z.number().min(0).max(1),
     readability: z.number().min(0).max(1),
   }),
+  modelParams: z.record(z.object({
+    temperature: z.number().min(0).max(2).optional(),
+    max_tokens: z.number().min(1).max(8192).optional(),
+    top_p: z.number().min(0).max(1).optional(),
+    frequency_penalty: z.number().min(-2).max(2).optional(),
+    presence_penalty: z.number().min(-2).max(2).optional(),
+  })).optional(),
 });
 
 export const GeneralTab: Tab = ({
@@ -57,10 +67,21 @@ export const GeneralTab: Tab = ({
   settings: SettingsState;
   onChange: (changes: Partial<SettingsState>) => void;
 }) => {
+  const availableModels = [
+    { id: "qwen1.5-72b", label: "Qwen 1.5 72B" },
+    { id: "gpt-4-turbo", label: "GPT-4 Turbo" },
+    { id: "deepseek-v3", label: "DeepSeek V3" },
+    { id: "claude-3", label: "Claude 3" },
+    { id: "doubao-pro", label: "Doubao Pro" },
+  ];
+
   const generalSettings = useMemo(() => settings.general, [settings]);
   const form = useForm<z.infer<typeof generalFormSchema>>({
     resolver: zodResolver(generalFormSchema, undefined, undefined),
-    defaultValues: generalSettings,
+    defaultValues: {
+      ...generalSettings,
+      modelParams: generalSettings.modelParams || {},
+    },
     mode: "all",
     reValidateMode: "onBlur",
   });
@@ -78,7 +99,7 @@ export const GeneralTab: Tab = ({
       }
     }
     if (hasChanges) {
-      onChange({ general: currentSettings });
+      onChange({ general: currentSettings } as SettingsState);
     }
   }, [currentSettings, onChange, settings]);
 
@@ -212,20 +233,12 @@ export const GeneralTab: Tab = ({
               control={form.control}
               name="selectedModels"
               render={({ field }) => {
-                const availableModels = [
-                  { id: "qwen1.5-72b", label: "Qwen 1.5 72B" },
-                  { id: "gpt-4-turbo", label: "GPT-4 Turbo" },
-                  { id: "deepseek-v3", label: "DeepSeek V3" },
-                  { id: "claude-3", label: "Claude 3" },
-                  { id: "doubao-pro", label: "Doubao Pro" },
-                ];
-                
                 return (
                   <FormItem>
                     <FormLabel>Selected Models (minimum 3)</FormLabel>
                     <FormControl>
                       <div className="grid grid-cols-2 gap-2">
-                        {availableModels.map((model) => (
+                        {availableModels.map((model: {id: string, label: string}) => (
                           <div key={model.id} className="flex items-center space-x-2">
                             <Checkbox
                               id={model.id}
@@ -332,6 +345,147 @@ export const GeneralTab: Tab = ({
                 </FormItem>
               )}
             />
+            
+            {/* Per-model parameter configuration */}
+            {form.watch("enableMultiModel") && form.watch("selectedModels")?.length > 0 && (
+              <div className="space-y-4">
+                <div className="border-t pt-6">
+                  <h3 className="text-lg font-medium mb-4">Model Parameters Configuration</h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Configure individual parameters for each selected model. Leave empty to use default values.
+                  </p>
+                  
+                  <div className="space-y-4">
+                    {form.watch("selectedModels")?.map((modelId: string) => {
+                      const modelLabel = availableModels.find((m: {id: string, label: string}) => m.id === modelId)?.label || modelId;
+                      const currentParams = getModelParams(modelId);
+                      
+                      return (
+                        <Collapsible key={modelId} className="border rounded-lg">
+                          <CollapsibleTrigger className="flex w-full items-center justify-between p-4 hover:bg-muted/50">
+                            <h4 className="font-medium">{modelLabel} Parameters</h4>
+                            <ChevronDown className="h-4 w-4" />
+                          </CollapsibleTrigger>
+                          <CollapsibleContent className="p-4 pt-0">
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <Label className="text-sm">Temperature (0.0-2.0)</Label>
+                                <Input
+                                  type="number"
+                                  step="0.1"
+                                  min="0"
+                                  max="2"
+                                  placeholder="0.7"
+                                  defaultValue={currentParams.temperature?.toString() || ""}
+                                  onChange={(e) => {
+                                    const value = e.target.value;
+                                    const params = getModelParams(modelId);
+                                    const newParams = { ...params };
+                                    if (value) {
+                                      newParams.temperature = parseFloat(value);
+                                    } else {
+                                      delete newParams.temperature;
+                                    }
+                                    setModelParams(modelId, newParams);
+                                  }}
+                                />
+                              </div>
+                              <div>
+                                <Label className="text-sm">Max Tokens (1-8192)</Label>
+                                <Input
+                                  type="number"
+                                  min="1"
+                                  max="8192"
+                                  placeholder="2048"
+                                  defaultValue={currentParams.max_tokens?.toString() || ""}
+                                  onChange={(e) => {
+                                    const value = e.target.value;
+                                    const params = getModelParams(modelId);
+                                    const newParams = { ...params };
+                                    if (value) {
+                                      newParams.max_tokens = parseInt(value);
+                                    } else {
+                                      delete newParams.max_tokens;
+                                    }
+                                    setModelParams(modelId, newParams);
+                                  }}
+                                />
+                              </div>
+                              <div>
+                                <Label className="text-sm">Top P (0.0-1.0)</Label>
+                                <Input
+                                  type="number"
+                                  step="0.1"
+                                  min="0"
+                                  max="1"
+                                  placeholder="1.0"
+                                  defaultValue={currentParams.top_p?.toString() || ""}
+                                  onChange={(e) => {
+                                    const value = e.target.value;
+                                    const params = getModelParams(modelId);
+                                    const newParams = { ...params };
+                                    if (value) {
+                                      newParams.top_p = parseFloat(value);
+                                    } else {
+                                      delete newParams.top_p;
+                                    }
+                                    setModelParams(modelId, newParams);
+                                  }}
+                                />
+                              </div>
+                              <div>
+                                <Label className="text-sm">Frequency Penalty (-2.0-2.0)</Label>
+                                <Input
+                                  type="number"
+                                  step="0.1"
+                                  min="-2"
+                                  max="2"
+                                  placeholder="0.0"
+                                  defaultValue={currentParams.frequency_penalty?.toString() || ""}
+                                  onChange={(e) => {
+                                    const value = e.target.value;
+                                    const params = getModelParams(modelId);
+                                    const newParams = { ...params };
+                                    if (value) {
+                                      newParams.frequency_penalty = parseFloat(value);
+                                    } else {
+                                      delete newParams.frequency_penalty;
+                                    }
+                                    setModelParams(modelId, newParams);
+                                  }}
+                                />
+                              </div>
+                              <div>
+                                <Label className="text-sm">Presence Penalty (-2.0-2.0)</Label>
+                                <Input
+                                  type="number"
+                                  step="0.1"
+                                  min="-2"
+                                  max="2"
+                                  placeholder="0.0"
+                                  defaultValue={currentParams.presence_penalty?.toString() || ""}
+                                  onChange={(e) => {
+                                    const value = e.target.value;
+                                    const params = getModelParams(modelId);
+                                    const newParams = { ...params };
+                                    if (value) {
+                                      newParams.presence_penalty = parseFloat(value);
+                                    } else {
+                                      delete newParams.presence_penalty;
+                                    }
+                                    setModelParams(modelId, newParams);
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          </CollapsibleContent>
+                        </Collapsible>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
           </form>
         </Form>
       </main>

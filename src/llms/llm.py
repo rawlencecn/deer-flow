@@ -133,14 +133,10 @@ def get_configured_llm_models() -> dict[str, list[str]]:
         return {}
 
 
-def get_multi_model_instance(model_id: str) -> Union[ChatOpenAI, ChatDeepSeek]:
+def get_multi_model_config(model_id: str) -> Dict[str, Any]:
     """
-    Get LLM instance for multi-model comparison by model ID.
-    Returns cached instance if available.
+    Get base configuration for a multi-model by ID.
     """
-    if model_id in _multi_model_cache:
-        return _multi_model_cache[model_id]
-
     if model_id not in MULTI_MODEL_CONFIG_MAP:
         raise ValueError(f"Unknown multi-model ID: {model_id}")
 
@@ -160,6 +156,23 @@ def get_multi_model_instance(model_id: str) -> Union[ChatOpenAI, ChatDeepSeek]:
     if "model" not in merged_conf:
         merged_conf["model"] = model_config["default_model"]
     
+    return merged_conf
+
+
+def get_multi_model_instance(model_id: str) -> Union[ChatOpenAI, ChatDeepSeek]:
+    """
+    Get LLM instance for multi-model comparison by model ID.
+    Returns cached instance if available.
+    """
+    if model_id in _multi_model_cache:
+        return _multi_model_cache[model_id]
+
+    if model_id not in MULTI_MODEL_CONFIG_MAP:
+        raise ValueError(f"Unknown multi-model ID: {model_id}")
+
+    model_config = MULTI_MODEL_CONFIG_MAP[model_id]
+    merged_conf = get_multi_model_config(model_id)
+    
     if model_config["provider"] == "deepseek":
         if "base_url" in merged_conf:
             merged_conf["api_base"] = merged_conf.pop("base_url")
@@ -171,10 +184,50 @@ def get_multi_model_instance(model_id: str) -> Union[ChatOpenAI, ChatDeepSeek]:
     return llm
 
 
+def get_multi_model_instance_with_params(model_id: str, custom_params: dict = None) -> Union[ChatOpenAI, ChatDeepSeek]:
+    """
+    Get LLM instance for multi-model comparison with custom parameters.
+    
+    Args:
+        model_id: ID of the model to create instance for
+        custom_params: Optional custom parameters to override defaults
+        
+    Returns:
+        LLM instance configured with merged parameters
+    """
+    if model_id in _multi_model_cache and not custom_params:
+        return _multi_model_cache[model_id]
+    
+    if model_id not in MULTI_MODEL_CONFIG_MAP:
+        raise ValueError(f"Unknown multi-model ID: {model_id}")
+    
+    model_config = MULTI_MODEL_CONFIG_MAP[model_id]
+    
+    base_conf = get_multi_model_config(model_id)
+    
+    default_params = model_config.get("default_params", {})
+    
+    final_params = {**default_params, **(custom_params or {})}
+    merged_conf = {**base_conf, **final_params}
+    
+    if model_config["provider"] == "deepseek":
+        if "base_url" in merged_conf:
+            merged_conf["api_base"] = merged_conf.pop("base_url")
+        llm = ChatDeepSeek(**merged_conf)
+    else:
+        llm = ChatOpenAI(**merged_conf)
+    
+    if not custom_params:
+        _multi_model_cache[model_id] = llm
+    
+    return llm
+
+
 async def execute_single_model(
     messages: list, 
     model_id: str, 
-    timeout: int = 120
+    timeout: int = 120,
+    custom_params: dict = None
 ) -> dict:
     """
     Execute a single model with timeout and return standardized output.
@@ -183,6 +236,7 @@ async def execute_single_model(
         messages: List of messages to send to the model
         model_id: ID of the model to use
         timeout: Timeout in seconds
+        custom_params: Optional custom parameters to override defaults
         
     Returns:
         Dictionary with execution results and metrics
@@ -190,7 +244,7 @@ async def execute_single_model(
     start_time = time.time()
     
     try:
-        llm = get_multi_model_instance(model_id)
+        llm = get_multi_model_instance_with_params(model_id, custom_params)
         
         result = await asyncio.wait_for(
             llm.ainvoke(messages),
@@ -208,7 +262,8 @@ async def execute_single_model(
             "content": content,
             "execution_time": execution_time,
             "tokens": total_tokens,
-            "success": True
+            "success": True,
+            "custom_params": custom_params
         }
         
     except asyncio.TimeoutError:
@@ -216,14 +271,16 @@ async def execute_single_model(
             "model_id": model_id,
             "error": "timeout",
             "execution_time": timeout,
-            "success": False
+            "success": False,
+            "custom_params": custom_params
         }
     except Exception as e:
         return {
             "model_id": model_id,
             "error": str(e),
             "execution_time": time.time() - start_time,
-            "success": False
+            "success": False,
+            "custom_params": custom_params
         }
 
 
